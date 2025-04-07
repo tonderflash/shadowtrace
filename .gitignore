@@ -1,0 +1,25 @@
+# Archivos generados por Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Reportes de ShadowTrace
+**/.shadowtrace/
+**/reports/
+**/*.json
+**/*.md
+
+# Archivos sensibles
+.env
+.env.local
+secrets.toml
+config.local.toml
+
+# Archivos temporales
+**/tmp/
+**/*.tmp
+
+# Cache y logs
+**/.cache/
+**/logs/
+**/*.log

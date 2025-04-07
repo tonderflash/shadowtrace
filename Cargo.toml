@@ -1,0 +1,37 @@
+[package]
+name = "shadowtrace"
+version = "0.1.0"
+edition = "2021"
+description = "Local AI-Powered Blackbox Debugger"
+authors = ["Desarrollador"]
+
+[dependencies]
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+# Información del sistema (multiplataforma)
+sysinfo = "0.29"     # Para información del sistema
+# Dependencias específicas de plataforma
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = "0.15"      # Para acceso a /proc en Linux (solo Linux)
+libc = "0.2"         # Para llamadas al sistema
+nix = "0.26"         # Para funcionalidades Unix
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"         # Para llamadas al sistema
+nix = "0.26"         # Para funcionalidades Unix
+
+# Formato y serialización
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+# Red y sockets
+tokio = { version = "1.28", features = ["full"] }
+# Para integración con LLM
+reqwest = { version = "0.11", features = ["json"] }
+# Registro y logs
+tracing = "0.1"
+tracing-subscriber = "0.3"
+# Utilidades
+anyhow = "1.0"       # Manejo de errores
+thiserror = "1.0"    # Definición de errores
+directories = "5.0"  # Manejo de directorios

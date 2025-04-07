@@ -1,0 +1,10 @@
+/Users/tonderflash/Developer/shadowtrace/shadowtrace/target/debug/deps/libio_lifetimes-4b67a72b05e62d51.rmeta: /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/lib.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/portability.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/traits.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/example_ffi.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/raw.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/views.rs
+
+/Users/tonderflash/Developer/shadowtrace/shadowtrace/target/debug/deps/io_lifetimes-4b67a72b05e62d51.d: /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/lib.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/portability.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/traits.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/example_ffi.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/raw.rs /Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/views.rs
+
+/Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/lib.rs:
+/Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/portability.rs:
+/Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/traits.rs:
+/Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/example_ffi.rs:
+/Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/raw.rs:
+/Users/tonderflash/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-lifetimes-1.0.11/src/views.rs:
