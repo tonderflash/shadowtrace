@@ -481,25 +481,77 @@ fn simulate_chart_data(seed: u64, current_value: f64) -> Vec<(f64, f64)> {
 /// Dibujar panel de análisis LLM
 fn draw_llm_analysis(frame: &mut Frame, app: &mut App, area: Rect) {
     // Mostrar análisis LLM si hay uno disponible
-        if let Some(analysis) = &app.process_llm_analysis {
+    if let Some(analysis) = &app.process_llm_analysis {
         // Convertir el análisis markdown a texto formateado para la interfaz
         let text = convert_markdown_to_spans(analysis);
         
+        // Calcular si necesitamos scroll vertical
+        let total_lines = text.len();
+        let visible_lines = area.height as usize - 2; // Restamos 2 por los bordes
+        
+        // Inicializar o actualizar el scroll si es necesario
+        if app.llm_text_scroll_index.is_none() {
+            app.llm_text_scroll_index = Some(0);
+        }
+        
+        // Obtener el índice de scroll actual
+        let scroll_index = app.llm_text_scroll_index.unwrap_or(0);
+        
+        // Mostrar indicadores de scroll solo si es necesario
+        let mut block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Análisis LLM ");
+            
+        // Añadir indicadores de scroll en el título si hay más contenido
+        if total_lines > visible_lines {
+            let scroll_percentage = if total_lines > 0 {
+                (scroll_index as f64 / (total_lines - visible_lines.min(total_lines)) as f64 * 100.0) as u16
+            } else {
+                0
+            };
+            
+            let scroll_info = format!(" Análisis LLM [{}%] ↓↑ ", scroll_percentage);
+            block = block.title(scroll_info);
+        }
+        
         let paragraph = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title(" Análisis LLM "))
-                .wrap(Wrap { trim: true })
-                .scroll((0, 0));
+            .block(block)
+            .wrap(Wrap { trim: true })
+            .scroll((scroll_index as u16, 0));
             
         frame.render_widget(paragraph, area);
+        
+        // Instrucciones de navegación si hay scroll disponible
+        if total_lines > visible_lines {
+            let nav_text = "↑/↓: Navegar | PgUp/PgDn: Saltar";
+            let nav_style = Style::default().fg(Color::DarkGray);
+            
+            // Crear un pequeño widget para mostrar las instrucciones de navegación
+            let nav_width = nav_text.len() as u16 + 4;
+            let nav_height = 1;
+            let nav_x = area.x + area.width.saturating_sub(nav_width);
+            let nav_y = area.y + area.height.saturating_sub(1);
+            
+            if nav_x >= area.x && nav_y >= area.y {
+                let nav_area = Rect::new(nav_x, nav_y, nav_width, nav_height);
+                let nav_widget = Paragraph::new(Line::from(vec![Span::styled(nav_text, nav_style)]))
+                    .alignment(ratatui::layout::Alignment::Right);
+                
+                frame.render_widget(nav_widget, nav_area);
+            }
+        }
     } else if let Some(pid) = app.selected_pid {
         // Mostrar un mensaje para iniciar análisis
         let mut content = vec![
-                    Line::from(vec![
+            Line::from(vec![
                 Span::styled("No hay análisis para este proceso", 
                     Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
             ]),
             Line::from(""),
         ];
+        
+        // Restablecer el índice de scroll cuando no hay análisis
+        app.llm_text_scroll_index = None;
         
         if app.is_monitoring_active {
             content.push(Line::from(vec![
@@ -515,7 +567,7 @@ fn draw_llm_analysis(frame: &mut Frame, app: &mut App, area: Rect) {
                 Span::styled("M", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
                 Span::raw(" para monitorear este proceso.")
             ]));
-                } else {
+        } else {
             content.push(Line::from(vec![
                 Span::raw("Presiona "),
                 Span::styled("A", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
@@ -525,9 +577,9 @@ fn draw_llm_analysis(frame: &mut Frame, app: &mut App, area: Rect) {
         
         let paragraph = Paragraph::new(content)
             .block(Block::default().borders(Borders::ALL).title(" Análisis LLM "))
-                        .alignment(ratatui::layout::Alignment::Center)
-                        .wrap(Wrap { trim: true });
-                    
+            .alignment(ratatui::layout::Alignment::Center)
+            .wrap(Wrap { trim: true });
+        
         frame.render_widget(paragraph, area);
     } else {
         // Mensaje cuando no hay proceso seleccionado

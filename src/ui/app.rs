@@ -73,6 +73,8 @@ pub struct App {
     llm_analysis_rx: Option<mpsc::Receiver<Result<String, anyhow::Error>>>,
     /// Animación del indicador de carga
     loading_tick: u64,
+    /// Índice de desplazamiento para el texto LLM
+    pub llm_text_scroll_index: Option<usize>,
 }
 
 impl Default for App {
@@ -101,6 +103,7 @@ impl Default for App {
             memory_history: Vec::new(),
             llm_analysis_rx: None,
             loading_tick: 0,
+            llm_text_scroll_index: None,
         };
         // Cargar procesos iniciales
         app.refresh_processes();
@@ -666,6 +669,39 @@ impl App {
                 // Actualizar el texto con el nuevo indicador
                 *analysis = analysis.replace("⏳", loading_char);
             }
+        }
+    }
+
+    /// Maneja el desplazamiento del texto de análisis LLM
+    pub fn handle_llm_text_scroll(&mut self, key: KeyCode) {
+        if let Some(analysis) = &self.process_llm_analysis {
+            // Convertir el texto a líneas para calcular el tamaño total
+            let total_lines = analysis.lines().count();
+            
+            // Obtener el índice actual de scroll o inicializarlo
+            let current_index = self.llm_text_scroll_index.unwrap_or(0);
+            
+            // Calcular el nuevo índice según la tecla presionada
+            let new_index = match key {
+                KeyCode::Up => current_index.saturating_sub(1),
+                KeyCode::Down => if current_index + 1 < total_lines {
+                    current_index + 1
+                } else {
+                    current_index
+                },
+                KeyCode::PageUp => current_index.saturating_sub(10),
+                KeyCode::PageDown => if current_index + 10 < total_lines {
+                    current_index + 10
+                } else {
+                    total_lines.saturating_sub(1)
+                },
+                KeyCode::Home => 0,
+                KeyCode::End => total_lines.saturating_sub(1),
+                _ => current_index,
+            };
+            
+            // Actualizar el índice de scroll
+            self.llm_text_scroll_index = Some(new_index);
         }
     }
 } 
