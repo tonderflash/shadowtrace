@@ -14,7 +14,7 @@ use crate::ui::App;
 use crate::ui::braille_art::{BrailleAnimator, AnimationType};
 
 pub fn draw_process_monitor(frame: &mut Frame, app: &mut App) {
-    let size = frame.area();
+    let size = frame.size();
     
     // Dividir la pantalla en secciones
     let main_chunks = Layout::default()
@@ -105,35 +105,54 @@ pub fn draw_process_monitor(frame: &mut Frame, app: &mut App) {
     
     // Barra de estado con teclas actualizadas
     let status = if let Some(msg) = &app.status_message {
-        format!("{}", msg)
+        msg.clone()
     } else {
         "Seleccione un proceso para monitorear".to_string()
     };
     
-    // Determinar qué teclas mostrar basado en el estado actual
-    let monitoring_controls = if app.is_monitoring_active {
-        format!("S: Detener | ")
-    } else if app.selected_pid.is_some() {
-        format!("M: Monitorear | A: Analizar | ")
-    } else {
-        String::new()
-    };
-    
-    let status_bar = Paragraph::new(Line::from(vec![
+    // Crear componentes de la barra de estado con teclas claras y visibles
+    let mut status_spans = vec![
         Span::styled(" ⌨️ ", Style::default().fg(Color::LightYellow)),
         Span::raw("ESC: Volver | "),
-        Span::styled("↑↓", Style::default().fg(Color::LightYellow)),
+        Span::styled("↑↓", Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD)),
         Span::raw(": Navegar | "),
-        Span::styled("TAB", Style::default().fg(Color::LightYellow)),
-        Span::raw(": Cambiar pestaña | "),
-        Span::styled("ENTER", Style::default().fg(Color::LightYellow)),
+        Span::styled("ENTER", Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD)),
         Span::raw(": Seleccionar | "),
-        Span::styled(monitoring_controls, Style::default().fg(Color::LightGreen)),
-        Span::styled(" 📋 ", Style::default().fg(Color::LightYellow)),
-        Span::raw(format!(": {}", status)),
-    ]))
-    .block(Block::default().borders(Borders::ALL))
-    .style(Style::default());
+    ];
+    
+    // Añadir controles específicos basados en el estado actual
+    if app.is_monitoring_active {
+        status_spans.push(Span::styled("S", Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)));
+        status_spans.push(Span::raw(": Detener monitoreo | "));
+    } else if app.selected_pid.is_some() {
+        status_spans.push(Span::styled("M", Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)));
+        status_spans.push(Span::raw(": Monitorear | "));
+        
+        // Destacar opción de analizar si hay suficientes datos
+        let analyze_style = if app.cpu_history.len() >= 5 {
+            Style::default().fg(Color::LightGreen).bg(Color::Black).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)
+            };
+            
+        status_spans.push(Span::styled("A", analyze_style));
+        if app.cpu_history.len() >= 5 {
+            status_spans.push(Span::raw(": Analizar datos | "));
+        } else {
+            status_spans.push(Span::raw(": Analizar | "));
+        }
+        
+        status_spans.push(Span::styled("TAB", Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)));
+        status_spans.push(Span::raw(": Cambiar vista | "));
+    }
+    
+    // Añadir mensaje de estado
+    status_spans.push(Span::styled(" 📋 ", Style::default().fg(Color::LightYellow)));
+    status_spans.push(Span::raw(format!(": {}", status)));
+    
+    let status_bar = Paragraph::new(Line::from(status_spans))
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default());
     
     frame.render_widget(status_bar, main_chunks[2]);
 }
@@ -149,11 +168,16 @@ fn draw_process_list(frame: &mut Frame, app: &mut App, area: Rect) {
             let pid = p.pid;
             let cpu = p.cpu_usage;
             
+            // Formato mejorado para mayor visibilidad
             let content = Line::from(vec![
-                Span::raw(format!("{:6} ", pid)),
+                Span::raw(format!("{:<8}", pid)),
                 Span::styled(
-                    format!("{:.1}% ", cpu),
-                    Style::default().fg(if cpu > 50.0 { Color::Red } else if cpu > 20.0 { Color::Yellow } else { Color::Green })
+                    format!("{:>6.1}% ", cpu),
+                    Style::default()
+                        .fg(if cpu > 50.0 { Color::Red } 
+                            else if cpu > 20.0 { Color::Yellow } 
+                            else { Color::Green })
+                        .add_modifier(Modifier::BOLD)
                 ),
                 Span::raw(name),
             ]);
@@ -163,7 +187,10 @@ fn draw_process_list(frame: &mut Frame, app: &mut App, area: Rect) {
         .collect();
     
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Procesos "))
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" Procesos ")
+            .title_style(Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::LightGreen))
         .highlight_symbol(" 👉 ");
     
@@ -313,6 +340,10 @@ fn draw_process_graphs(frame: &mut Frame, app: &mut App, area: Rect) {
                 
                 cpu_title = format!(" CPU % [Monitoreo: {}] ", duration_info);
                 mem_title = format!(" Memoria (MB) [Muestras: {}] ", app.cpu_history.len());
+            } else if app.cpu_history.len() >= 5 {
+                // Mostrar indicador de datos listos para análisis
+                cpu_title = format!(" CPU % [Datos recopilados: {}] ", app.cpu_history.len());
+                mem_title = format!(" Memoria (MB) [Análisis disponible ✓] ");
             }
             
             // Gráfico de CPU
@@ -449,100 +480,136 @@ fn simulate_chart_data(seed: u64, current_value: f64) -> Vec<(f64, f64)> {
 
 /// Dibujar panel de análisis LLM
 fn draw_llm_analysis(frame: &mut Frame, app: &mut App, area: Rect) {
-    let block = Block::default()
-        .title(" Análisis de Comportamiento (IA) ")
-        .borders(Borders::ALL)
-        .style(Style::default().fg(Color::Blue));
-    
-    let inner_area = block.inner(area);
-    frame.render_widget(block, area);
-    
-    if let Some(pid) = app.selected_pid {
+    // Mostrar análisis LLM si hay uno disponible
         if let Some(analysis) = &app.process_llm_analysis {
-            // Mostrar el análisis
-            let mut formatted_lines = Vec::new();
-            
-            // Convertir el texto del análisis a un formato compatible con la UI
-            for line in analysis.lines() {
-                if line.starts_with("##") {
-                    // Título principal
-                    formatted_lines.push(Line::from(
-                        Span::styled(line.trim_start_matches('#').trim(), 
-                            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
-                    ));
-                } else if line.starts_with("**") && line.ends_with("**") {
-                    // Texto en negrita
-                    let text = line.trim_start_matches("**").trim_end_matches("**");
-                    formatted_lines.push(Line::from(
-                        Span::styled(text, Style::default().fg(Color::White).add_modifier(Modifier::BOLD))
-                    ));
-                } else if line.starts_with("- ") {
-                    // Elemento de lista
-                    formatted_lines.push(Line::from(vec![
-                        Span::styled(" • ", Style::default().fg(Color::LightCyan)),
-                        Span::raw(line.trim_start_matches("- ")),
-                    ]));
-                } else if line.starts_with("*") && line.ends_with("*") {
-                    // Texto en cursiva
-                    let text = line.trim_start_matches('*').trim_end_matches('*');
-                    formatted_lines.push(Line::from(
-                        Span::styled(text, Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC))
-                    ));
-                } else if line.is_empty() {
-                    // Línea vacía
-                    formatted_lines.push(Line::from(""));
-                } else {
-                    // Texto normal
-                    formatted_lines.push(Line::from(line));
-                }
-            }
-            
-            let analysis_paragraph = Paragraph::new(formatted_lines)
-                .style(Style::default())
+        // Convertir el análisis markdown a texto formateado para la interfaz
+        let text = convert_markdown_to_spans(analysis);
+        
+        let paragraph = Paragraph::new(text)
+            .block(Block::default().borders(Borders::ALL).title(" Análisis LLM "))
                 .wrap(Wrap { trim: true })
                 .scroll((0, 0));
             
-            frame.render_widget(analysis_paragraph, inner_area);
-        } else {
-            // No hay análisis disponible
-            let text = vec![
-                Line::from(vec![
-                    Span::styled("Análisis no disponible", Style::default().fg(Color::Yellow)),
-                ]),
-                Line::from(vec![
-                    Span::raw("No se ha generado un análisis para este proceso."),
-                ]),
-                Line::from(vec![Span::raw("")]),
-                Line::from(vec![
-                    Span::raw("Presione "),
-                    Span::styled("TAB", Style::default().fg(Color::LightGreen)),
-                    Span::raw(" para generar un análisis de demostración."),
-                ]),
-            ];
-            
-            let paragraph = Paragraph::new(text)
-                .style(Style::default())
-                .alignment(ratatui::layout::Alignment::Center)
-                .wrap(Wrap { trim: true });
-            
-            frame.render_widget(paragraph, inner_area);
-        }
-    } else {
-        // No hay proceso seleccionado
-        let text = vec![
-            Line::from(vec![
-                Span::styled("Seleccione un proceso", Style::default().fg(Color::Yellow)),
+        frame.render_widget(paragraph, area);
+    } else if let Some(pid) = app.selected_pid {
+        // Mostrar un mensaje para iniciar análisis
+        let mut content = vec![
+                    Line::from(vec![
+                Span::styled("No hay análisis para este proceso", 
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
             ]),
+            Line::from(""),
+        ];
+        
+        if app.is_monitoring_active {
+            content.push(Line::from(vec![
+                Span::raw("El monitoreo está activo. Presiona "),
+                Span::styled("S", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::raw(" para detenerlo y luego "),
+                Span::styled("A", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::raw(" para realizar un análisis.")
+            ]));
+        } else if app.cpu_history.is_empty() {
+            content.push(Line::from(vec![
+                Span::raw("No hay datos de monitoreo. Presiona "),
+                Span::styled("M", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::raw(" para monitorear este proceso.")
+            ]));
+                } else {
+            content.push(Line::from(vec![
+                Span::raw("Presiona "),
+                Span::styled("A", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::raw(" para realizar un análisis con los datos recopilados.")
+            ]));
+        }
+        
+        let paragraph = Paragraph::new(content)
+            .block(Block::default().borders(Borders::ALL).title(" Análisis LLM "))
+                        .alignment(ratatui::layout::Alignment::Center)
+                        .wrap(Wrap { trim: true });
+                    
+        frame.render_widget(paragraph, area);
+    } else {
+        // Mensaje cuando no hay proceso seleccionado
+        let content = vec![
             Line::from(vec![
-                Span::raw("Seleccione un proceso de la lista para ver su análisis de comportamiento."),
+                Span::styled("Selecciona un proceso para analizar", 
+                    Style::default().fg(Color::Gray))
             ]),
         ];
         
-        let paragraph = Paragraph::new(text)
-            .style(Style::default())
+        let paragraph = Paragraph::new(content)
+            .block(Block::default().borders(Borders::ALL).title(" Análisis LLM "))
             .alignment(ratatui::layout::Alignment::Center)
             .wrap(Wrap { trim: true });
         
-        frame.render_widget(paragraph, inner_area);
+        frame.render_widget(paragraph, area);
     }
+}
+
+// Función para convertir markdown simple a spans con formato
+fn convert_markdown_to_spans(markdown: &str) -> Vec<Line> {
+    let mut lines = Vec::new();
+    
+    for line in markdown.lines() {
+        // Procesar encabezados, negritas, etc.
+        if line.starts_with("##") {
+            let title = line.trim_start_matches('#').trim();
+            lines.push(Line::from(vec![
+                Span::styled(title, 
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            ]));
+        } else if line.starts_with("#") {
+            let title = line.trim_start_matches('#').trim();
+            lines.push(Line::from(vec![
+                Span::styled(title, 
+                    Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))
+            ]));
+        } else if line.contains("**") {
+            // Procesar negritas con formato especial
+            let mut spans = Vec::new();
+            let mut current_text = String::new();
+            let mut is_bold = false;
+            
+            for part in line.split("**") {
+                if !current_text.is_empty() {
+                    if is_bold {
+                        spans.push(Span::styled(current_text.clone(), 
+                            Style::default().add_modifier(Modifier::BOLD)));
+                    } else {
+                        spans.push(Span::raw(current_text.clone()));
+                    }
+                    current_text.clear();
+                }
+                
+                current_text = part.to_string();
+                is_bold = !is_bold;
+            }
+            
+            if !current_text.is_empty() && !is_bold {
+                spans.push(Span::raw(current_text));
+            }
+            
+            lines.push(Line::from(spans));
+        } else if line.trim().starts_with("-") || line.trim().starts_with("*") || line.trim().starts_with("•") {
+            // Lista con viñetas
+            let item_text = line.trim_start_matches('-')
+                .trim_start_matches('*')
+                .trim_start_matches('•')
+                .trim();
+            
+            lines.push(Line::from(vec![
+                Span::styled(" • ", Style::default().fg(Color::Yellow)),
+                Span::raw(item_text)
+            ]));
+        } else if line.is_empty() {
+            // Línea en blanco
+            lines.push(Line::default());
+        } else {
+            // Texto normal
+            lines.push(Line::from(line));
+        }
+    }
+    
+    lines
 } 
