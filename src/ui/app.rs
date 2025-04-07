@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::widgets::ListState;
+use serde_json;
 
 use crate::process::ProcessMonitor;
 use crate::file_monitor::FileMonitor;
@@ -198,17 +199,20 @@ impl App {
         match key_event.code {
             KeyCode::Esc => self.state = AppState::Dashboard,
             KeyCode::Char('r') => self.refresh_processes(),
+            KeyCode::Char('a') => {
+                // Generar análisis real del proceso seleccionado
+                if let Some(_) = self.selected_pid {
+                    self.generate_real_analysis();
+                } else {
+                    self.status_message = Some("Selecciona un proceso primero".to_string());
+                }
+            },
             KeyCode::Char('m') => {
                 // Iniciar monitoreo si hay un proceso seleccionado
                 if let Some(_) = self.selected_pid {
                     if !self.is_monitoring_active {
-                        // La duración ya debería estar configurada, o usar 60 por defecto
-                        let duration = if self.monitoring_duration > 0 {
-                            self.monitoring_duration
-                        } else {
-                            60
-                        };
-                        self.start_monitoring(duration);
+                        // Monitoreo indefinido 
+                        self.start_monitoring(0);
                     } else {
                         self.status_message = Some("Ya hay un monitoreo activo. Presiona 's' para detenerlo.".to_string());
                     }
@@ -224,31 +228,6 @@ impl App {
                     self.status_message = Some("No hay un monitoreo activo".to_string());
                 }
             },
-            // Configurar duración con teclas numéricas
-            KeyCode::Char('1') => {
-                self.monitoring_duration = 30; // 30 segundos
-                self.status_message = Some("Duración de monitoreo: 30 segundos".to_string());
-            },
-            KeyCode::Char('2') => {
-                self.monitoring_duration = 60; // 1 minuto
-                self.status_message = Some("Duración de monitoreo: 1 minuto".to_string());
-            },
-            KeyCode::Char('3') => {
-                self.monitoring_duration = 300; // 5 minutos
-                self.status_message = Some("Duración de monitoreo: 5 minutos".to_string());
-            },
-            KeyCode::Char('4') => {
-                self.monitoring_duration = 600; // 10 minutos
-                self.status_message = Some("Duración de monitoreo: 10 minutos".to_string());
-            },
-            KeyCode::Char('5') => {
-                self.monitoring_duration = 1800; // 30 minutos
-                self.status_message = Some("Duración de monitoreo: 30 minutos".to_string());
-            },
-            KeyCode::Char('0') => {
-                self.monitoring_duration = 0; // Indefinido
-                self.status_message = Some("Duración de monitoreo: indefinida".to_string());
-            },
             KeyCode::Char('t') | KeyCode::Tab => {
                 // Alternar entre tabs
                 self.process_monitor_tab = (self.process_monitor_tab + 1) % 2;
@@ -259,11 +238,6 @@ impl App {
                         "Mostrando análisis LLM".to_string()
                     }
                 );
-                
-                // Si cambiamos al tab de análisis LLM y no hay análisis, generamos uno de ejemplo
-                if self.process_monitor_tab == 1 && self.process_llm_analysis.is_none() && self.selected_pid.is_some() {
-                    self.generate_demo_analysis();
-                }
             },
             KeyCode::Down => {
                 // Mover selección hacia abajo
@@ -306,7 +280,7 @@ impl App {
                         let pid = self.processes[i].pid;
                         self.selected_pid = Some(pid);
                         self.status_message = Some(format!(
-                            "Proceso seleccionado: PID {}. Presiona 'm' para iniciar monitoreo o 1-5 para cambiar duración.", 
+                            "Proceso seleccionado: PID {}. Presiona 'm' para iniciar monitoreo o 'a' para análisis.", 
                             pid
                         ));
                         
@@ -412,5 +386,55 @@ impl App {
     pub fn stop_monitoring(&mut self) {
         self.is_monitoring_active = false;
         self.status_message = Some("Monitoreo detenido".to_string());
+    }
+
+    /// Genera un análisis real con LLM para el proceso seleccionado
+    fn generate_real_analysis(&mut self) {
+        if let Some(pid) = self.selected_pid {
+            if let Some(process) = self.process_monitor.get_process_by_pid(pid) {
+                // Convertir la información del proceso a formato JSON para el LLM
+                let process_json = serde_json::json!({
+                    "pid": process.pid,
+                    "name": process.name,
+                    "path": process.path,
+                    "cmd_line": process.cmd_line,
+                    "cpu_usage": process.cpu_usage,
+                    "memory_usage": process.memory_usage,
+                    "cpu_history": self.cpu_history,
+                    "memory_history": self.memory_history,
+                    "monitoring_time": self.monitoring_time.as_secs(),
+                });
+                
+                // Esto actúa como placeholder. En una implementación completa,
+                // esta función debería ser async y llamar al cliente LLM
+                let analysis = format!(
+                    "## Análisis de Comportamiento del Proceso\n\n\
+                    **Proceso:** {} (PID: {})\n\n\
+                    **⚠️ Analizando en tiempo real...**\n\n\
+                    El proceso está siendo analizado. Para obtener un análisis real, es necesario configurar\
+                    la integración con un LLM en el archivo de configuración.\n\n\
+                    **Datos recopilados:**\n\
+                    - CPU media: {:.2}%\n\
+                    - Memoria: {} KB\n\
+                    - Tiempo de monitoreo: {} segundos\n\
+                    - Muestras recopiladas: {}\n\n\
+                    *El análisis completo será generado utilizando un modelo de lenguaje (LLM).\
+                    Este es un placeholder hasta que se implemente la integración completa.*\
+                    ",
+                    process.name, 
+                    process.pid,
+                    process.cpu_usage,
+                    process.memory_usage,
+                    self.monitoring_time.as_secs(),
+                    self.cpu_history.len()
+                );
+                
+                self.process_llm_analysis = Some(analysis);
+                self.status_message = Some("Análisis generado (simulado). Para un análisis real, configura un LLM.".to_string());
+                
+                // Cambiar a la pestaña de análisis LLM
+                self.process_monitor_tab = 1;
+            }
+        }
     }
 } 

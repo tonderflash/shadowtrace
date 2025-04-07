@@ -114,12 +114,7 @@ pub fn draw_process_monitor(frame: &mut Frame, app: &mut App) {
     let monitoring_controls = if app.is_monitoring_active {
         format!("S: Detener | ")
     } else if app.selected_pid.is_some() {
-        let duration_info = if app.monitoring_duration > 0 {
-            format!("{}s", app.monitoring_duration)
-        } else {
-            "∞".to_string()
-        };
-        format!("M: Iniciar ({}) | 0-5: Duración | ", duration_info)
+        format!("M: Monitorear | A: Analizar | ")
     } else {
         String::new()
     };
@@ -368,6 +363,13 @@ fn draw_process_graphs(frame: &mut Frame, app: &mut App, area: Rect) {
                 (process.memory_usage as f64 / 1000.0) * 1.2
             }.max(10.0); // Mínimo 10 MB para evitar gráficos planos
             
+            // Crear etiquetas para el eje Y como strings para evitar problemas de lifetime
+            let label_0 = "0".to_string();
+            let label_1 = format!("{:.0}", max_mem/4.0);
+            let label_2 = format!("{:.0}", max_mem/2.0);
+            let label_3 = format!("{:.0}", max_mem*3.0/4.0);
+            let label_4 = format!("{:.0}", max_mem);
+            
             let mem_chart = Chart::new(vec![mem_dataset])
                 .block(Block::default().title(mem_title).borders(Borders::ALL))
                 .x_axis(Axis::default()
@@ -384,8 +386,7 @@ fn draw_process_graphs(frame: &mut Frame, app: &mut App, area: Rect) {
                 .y_axis(Axis::default()
                     .title(Span::styled("MB", Style::default().fg(Color::Gray)))
                     .bounds([0.0, max_mem])
-                    .labels(["0", &format!("{:.0}", max_mem/4), &format!("{:.0}", max_mem/2), 
-                             &format!("{:.0}", max_mem*3/4), &format!("{:.0}", max_mem)]
+                    .labels([&label_0, &label_1, &label_2, &label_3, &label_4]
                         .iter()
                         .map(|x| Span::raw(x.clone()))
                         .collect::<Vec<_>>()));
