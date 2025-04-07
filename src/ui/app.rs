@@ -52,6 +52,16 @@ pub struct App {
     pub process_monitor_tab: usize,
     /// Análisis LLM para el proceso seleccionado
     pub process_llm_analysis: Option<String>,
+    /// Duración del monitoreo en segundos (0 = indefinido)
+    pub monitoring_duration: u64,
+    /// Tiempo de inicio del monitoreo actual
+    pub monitoring_start_time: Option<Instant>,
+    /// Indica si se está monitoreando activamente
+    pub is_monitoring_active: bool,
+    /// Historial de lecturas de CPU
+    pub cpu_history: Vec<f32>,
+    /// Historial de lecturas de memoria
+    pub memory_history: Vec<u64>,
 }
 
 impl Default for App {
@@ -73,6 +83,11 @@ impl Default for App {
             processes: Vec::new(),
             process_monitor_tab: 0,
             process_llm_analysis: None,
+            monitoring_duration: 0,
+            monitoring_start_time: None,
+            is_monitoring_active: false,
+            cpu_history: Vec::new(),
+            memory_history: Vec::new(),
         };
         // Cargar procesos iniciales
         app.refresh_processes();
@@ -91,12 +106,46 @@ impl App {
         self.tick_count = self.tick_count.wrapping_add(1);
         self.last_tick = Instant::now();
         
-        // Actualizar monitores con menos frecuencia
-        // Solo actualizar cada 10 ticks (aprox. cada 160ms con el nuevo timing)
-        if self.tick_count % 10 == 0 {
-            if let Some(pid) = self.selected_pid {
-                // Actualizar información del proceso
-                self.process_monitor.get_process_by_pid(pid);
+        // Actualizar tiempo de monitoreo si está activo
+        if self.is_monitoring_active {
+            if let Some(start_time) = self.monitoring_start_time {
+                self.monitoring_time = self.last_tick.duration_since(start_time);
+                
+                // Verificar si se ha alcanzado la duración máxima
+                if self.monitoring_duration > 0 && 
+                   self.monitoring_time.as_secs() >= self.monitoring_duration {
+                    // Detener el monitoreo si se alcanzó el límite
+                    self.stop_monitoring();
+                    self.status_message = Some(format!(
+                        "Monitoreo finalizado después de {} segundos", 
+                        self.monitoring_duration
+                    ));
+                    
+                    // Generar reporte si no hay uno
+                    if self.process_llm_analysis.is_none() {
+                        self.generate_demo_analysis();
+                    }
+                    return;
+                }
+            }
+            
+            // Actualizar información de proceso y almacenar historial cada 10 ticks
+            if self.tick_count % 10 == 0 {
+                if let Some(pid) = self.selected_pid {
+                    if let Some(process) = self.process_monitor.get_process_by_pid(pid) {
+                        // Almacenar historial de CPU y memoria
+                        self.cpu_history.push(process.cpu_usage);
+                        self.memory_history.push(process.memory_usage);
+                        
+                        // Limitar el tamaño del historial a 100 puntos
+                        if self.cpu_history.len() > 100 {
+                            self.cpu_history.remove(0);
+                        }
+                        if self.memory_history.len() > 100 {
+                            self.memory_history.remove(0);
+                        }
+                    }
+                }
             }
         }
     }
@@ -149,6 +198,57 @@ impl App {
         match key_event.code {
             KeyCode::Esc => self.state = AppState::Dashboard,
             KeyCode::Char('r') => self.refresh_processes(),
+            KeyCode::Char('m') => {
+                // Iniciar monitoreo si hay un proceso seleccionado
+                if let Some(_) = self.selected_pid {
+                    if !self.is_monitoring_active {
+                        // La duración ya debería estar configurada, o usar 60 por defecto
+                        let duration = if self.monitoring_duration > 0 {
+                            self.monitoring_duration
+                        } else {
+                            60
+                        };
+                        self.start_monitoring(duration);
+                    } else {
+                        self.status_message = Some("Ya hay un monitoreo activo. Presiona 's' para detenerlo.".to_string());
+                    }
+                } else {
+                    self.status_message = Some("Selecciona un proceso primero".to_string());
+                }
+            },
+            KeyCode::Char('s') => {
+                // Detener monitoreo activo
+                if self.is_monitoring_active {
+                    self.stop_monitoring();
+                } else {
+                    self.status_message = Some("No hay un monitoreo activo".to_string());
+                }
+            },
+            // Configurar duración con teclas numéricas
+            KeyCode::Char('1') => {
+                self.monitoring_duration = 30; // 30 segundos
+                self.status_message = Some("Duración de monitoreo: 30 segundos".to_string());
+            },
+            KeyCode::Char('2') => {
+                self.monitoring_duration = 60; // 1 minuto
+                self.status_message = Some("Duración de monitoreo: 1 minuto".to_string());
+            },
+            KeyCode::Char('3') => {
+                self.monitoring_duration = 300; // 5 minutos
+                self.status_message = Some("Duración de monitoreo: 5 minutos".to_string());
+            },
+            KeyCode::Char('4') => {
+                self.monitoring_duration = 600; // 10 minutos
+                self.status_message = Some("Duración de monitoreo: 10 minutos".to_string());
+            },
+            KeyCode::Char('5') => {
+                self.monitoring_duration = 1800; // 30 minutos
+                self.status_message = Some("Duración de monitoreo: 30 minutos".to_string());
+            },
+            KeyCode::Char('0') => {
+                self.monitoring_duration = 0; // Indefinido
+                self.status_message = Some("Duración de monitoreo: indefinida".to_string());
+            },
             KeyCode::Char('t') | KeyCode::Tab => {
                 // Alternar entre tabs
                 self.process_monitor_tab = (self.process_monitor_tab + 1) % 2;
@@ -205,7 +305,10 @@ impl App {
                     if i < self.processes.len() {
                         let pid = self.processes[i].pid;
                         self.selected_pid = Some(pid);
-                        self.status_message = Some(format!("Monitoreando proceso PID: {}", pid));
+                        self.status_message = Some(format!(
+                            "Proceso seleccionado: PID {}. Presiona 'm' para iniciar monitoreo o 1-5 para cambiar duración.", 
+                            pid
+                        ));
                         
                         // Limpiar análisis anterior si se selecciona un nuevo proceso
                         self.process_llm_analysis = None;
@@ -283,5 +386,31 @@ impl App {
                 self.status_message = Some("Análisis LLM generado".to_string());
             }
         }
+    }
+
+    /// Iniciar monitoreo de proceso
+    pub fn start_monitoring(&mut self, duration_secs: u64) {
+        self.monitoring_duration = duration_secs;
+        self.monitoring_start_time = Some(Instant::now());
+        self.monitoring_time = Duration::from_secs(0);
+        self.is_monitoring_active = true;
+        self.cpu_history.clear();
+        self.memory_history.clear();
+        
+        // Cambiar mensaje de estado
+        if self.monitoring_duration > 0 {
+            self.status_message = Some(format!(
+                "Monitoreando proceso por {} segundos", 
+                self.monitoring_duration
+            ));
+        } else {
+            self.status_message = Some("Monitoreando proceso indefinidamente".to_string());
+        }
+    }
+    
+    /// Detener monitoreo de proceso
+    pub fn stop_monitoring(&mut self) {
+        self.is_monitoring_active = false;
+        self.status_message = Some("Monitoreo detenido".to_string());
     }
 } 

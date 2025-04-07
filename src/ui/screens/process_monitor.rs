@@ -110,6 +110,20 @@ pub fn draw_process_monitor(frame: &mut Frame, app: &mut App) {
         "Seleccione un proceso para monitorear".to_string()
     };
     
+    // Determinar qué teclas mostrar basado en el estado actual
+    let monitoring_controls = if app.is_monitoring_active {
+        format!("S: Detener | ")
+    } else if app.selected_pid.is_some() {
+        let duration_info = if app.monitoring_duration > 0 {
+            format!("{}s", app.monitoring_duration)
+        } else {
+            "∞".to_string()
+        };
+        format!("M: Iniciar ({}) | 0-5: Duración | ", duration_info)
+    } else {
+        String::new()
+    };
+    
     let status_bar = Paragraph::new(Line::from(vec![
         Span::styled(" ⌨️ ", Style::default().fg(Color::LightYellow)),
         Span::raw("ESC: Volver | "),
@@ -119,6 +133,7 @@ pub fn draw_process_monitor(frame: &mut Frame, app: &mut App) {
         Span::raw(": Cambiar pestaña | "),
         Span::styled("ENTER", Style::default().fg(Color::LightYellow)),
         Span::raw(": Seleccionar | "),
+        Span::styled(monitoring_controls, Style::default().fg(Color::LightGreen)),
         Span::styled(" 📋 ", Style::default().fg(Color::LightYellow)),
         Span::raw(format!(": {}", status)),
     ]))
@@ -269,9 +284,41 @@ fn draw_process_graphs(frame: &mut Frame, app: &mut App, area: Rect) {
     
     if let Some(pid) = selected_pid {
         if let Some(process) = app.process_monitor.get_process_by_pid(pid) {
-            // Datos simulados para el gráfico (en una aplicación real, estos datos vendrían del historial)
-            let cpu_data = simulate_chart_data(app.tick_count, process.cpu_usage as f64);
-            let mem_data = simulate_chart_data(app.tick_count, process.memory_usage as f64 / 1000.0); // Convertir a MB
+            // Preparar datos para los gráficos
+            let cpu_data: Vec<(f64, f64)>;
+            let mem_data: Vec<(f64, f64)>;
+            
+            // Usar datos históricos reales si hay monitoreo activo
+            if app.is_monitoring_active && !app.cpu_history.is_empty() {
+                // Convertir historial a formato de datos para el gráfico
+                cpu_data = app.cpu_history.iter().enumerate()
+                    .map(|(i, &value)| (i as f64, value as f64))
+                    .collect();
+                
+                mem_data = app.memory_history.iter().enumerate()
+                    .map(|(i, &value)| (i as f64, value as f64 / 1000.0)) // Convertir a MB
+                    .collect();
+            } else {
+                // Usar datos simulados si no hay monitoreo activo
+                cpu_data = simulate_chart_data(app.tick_count, process.cpu_usage as f64);
+                mem_data = simulate_chart_data(app.tick_count, process.memory_usage as f64 / 1000.0); // Convertir a MB
+            }
+            
+            // Añadir indicadores de monitoreo si está activo
+            let mut cpu_title = " CPU % ".to_string();
+            let mut mem_title = " Memoria (MB) ".to_string();
+            
+            if app.is_monitoring_active {
+                let elapsed = app.monitoring_time.as_secs();
+                let duration_info = if app.monitoring_duration > 0 {
+                    format!("{}/{} seg", elapsed, app.monitoring_duration)
+                } else {
+                    format!("{} seg", elapsed)
+                };
+                
+                cpu_title = format!(" CPU % [Monitoreo: {}] ", duration_info);
+                mem_title = format!(" Memoria (MB) [Muestras: {}] ", app.cpu_history.len());
+            }
             
             // Gráfico de CPU
             let cpu_dataset = Dataset::default()
@@ -282,10 +329,14 @@ fn draw_process_graphs(frame: &mut Frame, app: &mut App, area: Rect) {
                 .data(&cpu_data);
             
             let cpu_chart = Chart::new(vec![cpu_dataset])
-                .block(Block::default().title(" CPU % ").borders(Borders::ALL))
+                .block(Block::default().title(cpu_title).borders(Borders::ALL))
                 .x_axis(Axis::default()
                     .title(Span::styled("Tiempo", Style::default().fg(Color::Gray)))
-                    .bounds([0.0, 30.0])
+                    .bounds([0.0, if app.is_monitoring_active && !app.cpu_history.is_empty() { 
+                        app.cpu_history.len() as f64 
+                    } else { 
+                        30.0 
+                    }])
                     .labels(["0s", "10s", "20s", "30s"]
                         .iter()
                         .map(|&x| Span::raw(x))
@@ -308,21 +359,35 @@ fn draw_process_graphs(frame: &mut Frame, app: &mut App, area: Rect) {
                 .style(Style::default().fg(Color::Magenta))
                 .data(&mem_data);
             
+            // Calcular límite máximo para el eje Y de memoria
+            let max_mem = if app.is_monitoring_active && !app.memory_history.is_empty() {
+                // Usar el valor máximo del historial multiplicado por 1.2 para dar espacio
+                let max_val = *app.memory_history.iter().max().unwrap_or(&process.memory_usage);
+                (max_val as f64 / 1000.0) * 1.2
+            } else {
+                (process.memory_usage as f64 / 1000.0) * 1.2
+            }.max(10.0); // Mínimo 10 MB para evitar gráficos planos
+            
             let mem_chart = Chart::new(vec![mem_dataset])
-                .block(Block::default().title(" Memoria (MB) ").borders(Borders::ALL))
+                .block(Block::default().title(mem_title).borders(Borders::ALL))
                 .x_axis(Axis::default()
                     .title(Span::styled("Tiempo", Style::default().fg(Color::Gray)))
-                    .bounds([0.0, 30.0])
+                    .bounds([0.0, if app.is_monitoring_active && !app.memory_history.is_empty() { 
+                        app.memory_history.len() as f64 
+                    } else { 
+                        30.0 
+                    }])
                     .labels(["0s", "10s", "20s", "30s"]
                         .iter()
                         .map(|&x| Span::raw(x))
                         .collect::<Vec<_>>()))
                 .y_axis(Axis::default()
                     .title(Span::styled("MB", Style::default().fg(Color::Gray)))
-                    .bounds([0.0, (process.memory_usage as f64 / 1000.0 * 1.2).max(100.0)])
-                    .labels(["0", "25", "50", "75", "100"]
+                    .bounds([0.0, max_mem])
+                    .labels(["0", &format!("{:.0}", max_mem/4), &format!("{:.0}", max_mem/2), 
+                             &format!("{:.0}", max_mem*3/4), &format!("{:.0}", max_mem)]
                         .iter()
-                        .map(|&x| Span::raw(x))
+                        .map(|x| Span::raw(x.clone()))
                         .collect::<Vec<_>>()));
             
             frame.render_widget(mem_chart, graphs_chunks[1]);
