@@ -1,11 +1,13 @@
-use anyhow::Result;
+use chrono::{DateTime, Utc};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+use anyhow::Result;
+use serde_json;
 use tokio::time;
-use chrono::Utc;
+use tracing::{info, error};
 
 use crate::process::ProcessMonitor;
-use crate::file_monitor::{FileEvent, FileMonitor, FileOperation};
+use crate::file_monitor::{FileEvent, FileMonitor, FileOperation, FileActivity};
 use crate::network::{NetworkEvent, NetworkMonitor, Protocol, Direction, ConnectionState};
 use crate::reports::Report;
 use crate::config::AppConfig;
@@ -16,9 +18,18 @@ pub async fn monitor_process(
     pid: &Option<u32>,
     name: &Option<String>,
     duration: u64,
-    interval_secs: u64,
+    interval: u64,
     config: &AppConfig,
 ) -> Result<()> {
+    if let Some(pid) = pid {
+        info!("Monitoreando proceso con PID {} durante {} segundos", pid, duration);
+    } else if let Some(name) = name {
+        info!("Monitoreando proceso '{}' durante {} segundos", name, duration);
+    } else {
+        error!("Debe especificar un PID o nombre de proceso");
+        return Err(anyhow::anyhow!("Debe especificar un PID o nombre de proceso"));
+    }
+
     // Inicializar monitores
     let mut process_monitor = ProcessMonitor::new();
     let mut file_monitor = FileMonitor::new();
@@ -48,7 +59,7 @@ pub async fn monitor_process(
         .ok_or_else(|| AppError::ProcessAccessError(format!("No se encontró el proceso con PID: {}", target_pid)))?;
 
     // Iniciar reporte
-    let mut report = Report::new(target_pid, process_info.name.clone());
+    let mut report = Report::new_for_process(target_pid, process_info.name.clone());
     report.set_process_info(process_info.clone());
     
     // Mensaje de inicio
@@ -68,13 +79,13 @@ pub async fn monitor_process(
     );
 
     // Configurar loop de monitoreo
-    let interval_duration = Duration::from_secs(interval_secs);
+    let interval_duration = Duration::from_secs(interval);
     let mut tick_interval = time::interval(interval_duration);
     
     // Tiempo máximo si no es infinito
     let max_iterations = if duration > 0 { 
-        if interval_secs > 0 {
-            Some(duration / interval_secs)
+        if interval > 0 {
+            Some(duration / interval)
         } else {
             Some(duration) // Si el intervalo es 0, usamos la duración como número máximo de iteraciones
         }
@@ -161,7 +172,12 @@ pub async fn monitor_process(
             network_events_json,
         ).await {
             Ok(analysis) => {
-                report.set_llm_analysis(analysis.clone());
+                // Almacenar el análisis como hallazgo
+                report.add_info(
+                    "llm_analysis", 
+                    "Análisis de comportamiento realizado por IA",
+                    Some(serde_json::from_str(&analysis)?),
+                );
                 println!("\n--- Análisis de IA ---\n{}\n", analysis);
             }
             Err(e) => {
@@ -211,7 +227,16 @@ fn simulate_file_events(
             success: true,
         };
         file_monitor.record_event(event.clone());
-        report.add_file_event(event);
+        
+        // Agregar como actividad de archivo
+        let file_activity = FileActivity {
+            path: PathBuf::from(event.path.clone()),
+            operation: event.operation,
+            process_id: Some(event.pid),
+            timestamp: SystemTime::now(),
+            size: event.size,
+        };
+        report.add_file_activity(file_activity);
     }
 }
 
@@ -268,16 +293,19 @@ fn detect_network_patterns(
 /// Auditar un binario
 pub async fn audit_binary(
     binary: &PathBuf,
-    _args: &Option<Vec<String>>,
-    _timeout: u64,
-    _config: &AppConfig,
+    args: &Option<Vec<String>>,
+    timeout: u64,
+    config: &AppConfig,
 ) -> Result<()> {
-    println!("Auditando binario: {:?}", binary);
-    println!("Función no implementada completamente");
+    info!("Auditando binario: {:?}", binary);
     
-    // Aquí iría el código para ejecutar el binario en un entorno controlado
-    // y monitorear su comportamiento
+    if let Some(args_vec) = args {
+        info!("Argumentos: {:?}", args_vec);
+    }
     
+    info!("Tiempo máximo de ejecución: {} segundos", timeout);
+    info!("Esta función está parcialmente implementada");
+
     Ok(())
 }
 
@@ -286,13 +314,19 @@ pub async fn monitor_system(
     watch: bool,
     duration: u64,
     suspicious_only: bool,
-    _config: &AppConfig,
+    config: &AppConfig,
 ) -> Result<()> {
-    println!("Monitoreando sistema: watch={}, duration={}, suspicious_only={}", 
-        watch, duration, suspicious_only);
-    println!("Función no implementada completamente");
+    info!("Monitoreando sistema durante {} segundos", duration);
     
-    // Aquí iría el código para monitorear la actividad del sistema
+    if watch {
+        info!("Modo observación activo");
+    }
+    
+    if suspicious_only {
+        info!("Mostrando solo actividad sospechosa");
+    }
+    
+    info!("Esta función está parcialmente implementada");
     
     Ok(())
 } 

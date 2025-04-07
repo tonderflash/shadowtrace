@@ -55,7 +55,7 @@ impl ProcessMonitor {
                 pid: pid.as_u32(),
                 name: process.name().to_string(),
                 path: Some(process.exe().to_string_lossy().to_string()),
-                cmd_line: Some(process.cmd().iter().map(|s| s.to_string()).collect()),
+                cmd_line: Some(process.cmd().iter().take(5).map(|s| s.to_string()).collect()),
                 user: None, // No disponible directamente en sysinfo
                 cpu_usage: process.cpu_usage(),
                 memory_usage: process.memory(),
@@ -68,22 +68,22 @@ impl ProcessMonitor {
 
     /// Obtener todos los procesos activos
     pub fn get_all_processes(&mut self) -> Vec<ProcessInfo> {
-        self.system.refresh_all();
+        self.system.refresh_processes();
         
         self.system
             .processes()
             .iter()
+            .take(100)
             .map(|(pid, process)| {
                 ProcessInfo {
                     pid: pid.as_u32(),
                     name: process.name().to_string(),
-                    path: Some(process.exe().to_string_lossy().to_string()),
-                    cmd_line: Some(process.cmd().iter().map(|s| s.to_string()).collect()),
+                    path: None,
+                    cmd_line: None,
                     user: None,
                     cpu_usage: process.cpu_usage(),
                     memory_usage: process.memory(),
-                    start_time: chrono::DateTime::from_timestamp(process.start_time() as i64, 0)
-                        .unwrap_or_else(|| Utc::now()),
+                    start_time: Utc::now(),
                     children: Vec::new(),
                 }
             })

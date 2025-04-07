@@ -10,6 +10,11 @@ authors = ["Desarrollador"]
 clap = { version = "4.4", features = ["derive"] }
 # Información del sistema (multiplataforma)
 sysinfo = "0.29"     # Para información del sistema
+# UI ASCII y Animación
+ratatui = { version = "0.30.0-alpha.2", features = ["all-widgets", "crossterm"] }
+crossterm = "0.29.0"  # Para manipulación de la terminal
+rsille = { version = "2.3.1", features = ["image"] } # Biblioteca de arte braille
+rand = { version = "0.8", features = ["small_rng"] }
 # Dependencias específicas de plataforma
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.15"      # Para acceso a /proc en Linux (solo Linux)
@@ -25,7 +30,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 # Red y sockets
-tokio = { version = "1.28", features = ["full"] }
+tokio = { version = "1", features = ["full", "rt-multi-thread", "macros"] }
 # Para integración con LLM
 reqwest = { version = "0.11", features = ["json"] }
 # Registro y logs

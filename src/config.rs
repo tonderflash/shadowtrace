@@ -12,6 +12,8 @@ pub struct AppConfig {
     pub verbose: u8,
     /// Cliente LLM configurado
     pub llm_client: Option<LlmClient>,
+    /// Indica si la integración con LLM está desactivada
+    pub no_llm: bool,
 }
 
 impl AppConfig {
@@ -53,6 +55,31 @@ impl AppConfig {
             api_url,
             verbose,
             llm_client,
+            no_llm,
         })
+    }
+
+    /// Crear una configuración con valores por defecto
+    pub fn default() -> Self {
+        Self {
+            model: "llama2".to_string(),
+            api_url: "http://localhost:11434/api".to_string(),
+            verbose: 0,
+            no_llm: false,
+            llm_client: None,
+        }
+    }
+}
+
+// Implementar Default para AppConfig
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            model: "llama2".to_string(),
+            api_url: "http://localhost:11434/api".to_string(),
+            verbose: 0,
+            no_llm: false,
+            llm_client: None,
+        }
     }
 } 

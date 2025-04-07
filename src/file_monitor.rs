@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::{SystemTime, Duration};
 
 /// Tipo de operación de archivo
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FileOperation {
     /// Lectura
     Read,
@@ -17,6 +19,12 @@ pub enum FileOperation {
     Open,
     /// Cierre
     Close,
+    /// Renombrado
+    Rename { old_path: PathBuf },
+    /// Cambio de permisos
+    ChangePermissions,
+    /// Desconocido
+    Unknown,
 }
 
 /// Registro de una operación de archivo
@@ -36,12 +44,33 @@ pub struct FileEvent {
     pub success: bool,
 }
 
+/// Información sobre un archivo monitoreado
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileActivity {
+    /// Ruta del archivo
+    pub path: PathBuf,
+    /// Tipo de operación
+    pub operation: FileOperation,
+    /// Proceso que realizó la operación (PID)
+    pub process_id: Option<u32>,
+    /// Tiempo de la operación
+    pub timestamp: SystemTime,
+    /// Tamaño del archivo (si es conocido)
+    pub size: Option<u64>,
+}
+
 /// Monitor de operaciones de archivo
 pub struct FileMonitor {
     /// Historial de eventos de archivo
     events: Vec<FileEvent>,
     /// Mapa de archivos abiertos por PID
     open_files: HashMap<u32, Vec<String>>,
+    /// Rutas bajo monitoreo
+    paths: Vec<PathBuf>,
+    /// Actividades registradas
+    activities: Vec<FileActivity>,
+    /// Filtrar por PID
+    filter_pid: Option<u32>,
 }
 
 impl FileMonitor {
@@ -50,6 +79,9 @@ impl FileMonitor {
         Self {
             events: Vec::new(),
             open_files: HashMap::new(),
+            paths: Vec::new(),
+            activities: Vec::new(),
+            filter_pid: None,
         }
     }
 
@@ -165,5 +197,61 @@ impl FileMonitor {
         }
         
         suspicious
+    }
+
+    /// Añadir una ruta para monitorear
+    pub fn add_path(&mut self, path: PathBuf) {
+        self.paths.push(path);
+    }
+
+    /// Establecer filtro por PID
+    pub fn set_pid_filter(&mut self, pid: Option<u32>) {
+        self.filter_pid = pid;
+    }
+
+    /// Obtener las actividades registradas
+    pub fn get_activities(&self) -> &[FileActivity] {
+        &self.activities
+    }
+    
+    /// Añadir una actividad manualmente (para simulación)
+    pub fn add_activity(&mut self, activity: FileActivity) {
+        self.activities.push(activity);
+    }
+    
+    /// Simular una detección para pruebas
+    pub fn simulate_activity(&mut self) {
+        // Simulamos algunas operaciones de archivos para probar la UI
+        if self.paths.is_empty() {
+            // Añadir una ruta por defecto si no hay ninguna
+            self.paths.push(PathBuf::from("/tmp"));
+        }
+        
+        let operations = [
+            FileOperation::Read,
+            FileOperation::Write,
+            FileOperation::Create,
+        ];
+        
+        // Simular una actividad con la primera ruta
+        if let Some(path) = self.paths.first() {
+            let op_index = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or(Duration::from_secs(0))
+                .as_secs() as usize % operations.len();
+                
+            self.activities.push(FileActivity {
+                path: path.join(format!("file_{}.txt", self.activities.len())),
+                operation: operations[op_index].clone(),
+                process_id: self.filter_pid,
+                timestamp: SystemTime::now(),
+                size: Some(1024 * (self.activities.len() as u64 % 10 + 1)),
+            });
+            
+            // Limitar a 100 registros para no consumir demasiada memoria
+            if self.activities.len() > 100 {
+                self.activities.remove(0);
+            }
+        }
     }
 } 
