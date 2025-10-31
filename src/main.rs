@@ -130,24 +130,39 @@ fn run_tui_mode(config: &AppConfig) -> Result<(), Box<dyn Error>> {
     result.map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn Error>)
 }
 
-// Manejar eventos de teclado
-fn handle_key_events(key_event: KeyEvent, app: &mut App) -> bool {
-    match app.current_state {
-        AppState::Dashboard => handle_dashboard_keys(key_event, app),
-        AppState::ProcessMonitor => handle_process_monitor_keys(key_event, app),
-        AppState::FileMonitor => handle_file_monitor_keys(key_event, app),
-        AppState::NetworkMonitor => handle_network_monitor_keys(key_event, app),
-        AppState::Reports => handle_reports_keys(key_event, app),
-        AppState::Help => handle_help_keys(key_event, app),
-    }
+// Funciones auxiliares para manejar eventos de teclado
+fn handle_dashboard_keys(key_event: crossterm::event::KeyEvent, app: &mut ui::app::App) -> bool {
+    app.handle_key_event(key_event);
+    false
+}
+
+fn handle_file_monitor_keys(key_event: crossterm::event::KeyEvent, app: &mut ui::app::App) -> bool {
+    app.handle_key_event(key_event);
+    false
+}
+
+fn handle_network_monitor_keys(key_event: crossterm::event::KeyEvent, app: &mut ui::app::App) -> bool {
+    app.handle_key_event(key_event);
+    false
+}
+
+fn handle_reports_keys(key_event: crossterm::event::KeyEvent, app: &mut ui::app::App) -> bool {
+    app.handle_key_event(key_event);
+    false
+}
+
+fn handle_help_keys(key_event: crossterm::event::KeyEvent, app: &mut ui::app::App) -> bool {
+    app.handle_key_event(key_event);
+    false
 }
 
 // Manejar eventos de teclado en la pantalla de monitor de procesos
-fn handle_process_monitor_keys(key_event: KeyEvent, app: &mut App) -> bool {
+fn handle_process_monitor_keys(key_event: crossterm::event::KeyEvent, app: &mut ui::app::App) -> bool {
+    use crossterm::event::KeyCode;
     match key_event.code {
         // Teclas de navegación general
         KeyCode::Esc => {
-            app.current_state = AppState::Dashboard;
+            app.state = ui::app::AppState::Dashboard;
             app.selected_pid = None;
             app.status_message = None;
             app.cpu_history.clear();
@@ -258,8 +273,7 @@ fn handle_process_monitor_keys(key_event: KeyEvent, app: &mut App) -> bool {
                 false
             }
         },
-        // Otras teclas...
-        // ... resto del código existente ...
+        _ => false,
     }
 }
 
