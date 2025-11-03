@@ -1,141 +1,141 @@
 # ShadowTrace 🕵️‍♂️
 
-**Un debugger tipo caja negra potenciado por IA**
+**An AI-powered black-box style debugger**
 
-ShadowTrace es una herramienta local que analiza procesos, archivos y conexiones de red en tiempo real, generando reportes explicativos con ayuda de modelos de lenguaje (LLM). Permite entender el comportamiento de binarios opacos sin necesidad de acceder al código fuente original.
+ShadowTrace is a local tool that analyzes processes, files, and network connections in real time, generating explanatory reports with the help of language models (LLMs). It helps you understand the behavior of opaque binaries without access to their original source code.
 
-## 🔍 Características
+## 🔍 Features
 
-- Intercepta procesos ejecutados en el sistema
-- Monitorea archivos abiertos (lectura/escritura)
-- Detecta conexiones de red (sockets, IPs, puertos)
-- Genera logs estructurados en JSON
-- Utiliza LLM local para analizar patrones y generar explicaciones
-- Interfaz por línea de comandos (CLI)
+- Intercepts processes executed on the system
+- Monitors opened files (read/write)
+- Detects network connections (sockets, IPs, ports)
+- Produces structured JSON logs
+- Uses a local LLM to analyze patterns and generate explanations
+- Command-line interface (CLI)
 
-## 🚀 Instalación
+## 🚀 Installation
 
-### Método automatizado (recomendado)
+### Automated (recommended)
 
 ```bash
-# Clonar el repositorio
+# Clone the repository
 git clone https://github.com/usuario/shadowtrace.git
 cd shadowtrace
 
-# Ejecutar el script de instalación
+# Run the installer script
 ./install.sh
 ```
 
-El script de instalación verificará las dependencias necesarias, como Rust y Ollama (opcional), y compilará e instalará ShadowTrace.
+The installer checks dependencies like Rust and Ollama (optional), then builds and installs ShadowTrace.
 
-### Instalación manual
+### Manual installation
 
 ```bash
-# Clonar el repositorio
+# Clone the repository
 git clone https://github.com/usuario/shadowtrace.git
 cd shadowtrace
 
-# Compilar
+# Build
 cargo build --release
 
-# Opcional: Instalar globalmente
+# Optional: install globally
 sudo cp target/release/shadowtrace /usr/local/bin/
 ```
 
-### Prerrequisitos
+### Prerequisites
 
-- **Rust** (1.70+): Necesario para compilar el proyecto
-- **Ollama** (recomendado): Para la funcionalidad de análisis con LLM
-  - Modelos recomendados: llama2, mistral, orca-mini
+- **Rust** (1.70+): Required to build the project
+- **Ollama** (recommended): For LLM analysis functionality
+  - Recommended models: llama2, mistral, orca-mini
 
-## 📋 Uso
+## 📋 Usage
 
 ```bash
-# Ver ayuda y opciones disponibles
+# Help and available options
 shadowtrace --help
 
-# Monitorear un proceso específico
+# Monitor a specific process
 shadowtrace monitor --pid 1234
 shadowtrace monitor --name firefox --duration 120
 
-# Analizar un binario
+# Audit a binary
 shadowtrace audit --binary /path/to/binary
 
-# Monitorear todos los procesos del sistema
+# Monitor all system processes
 shadowtrace system --watch
 
-# Usar un modelo específico
+# Use a specific model
 shadowtrace --model mistral monitor --name chrome
 ```
 
-## 📊 Reportes
+## 📊 Reports
 
-ShadowTrace genera automáticamente reportes detallados en formatos JSON y Markdown. Estos se guardan en:
+ShadowTrace automatically generates detailed reports in JSON and Markdown formats, stored at:
 
 ```
 ~/.shadowtrace/reports/
 ```
 
-Los reportes incluyen:
+Reports include:
 
-- Información completa del proceso
-- Eventos de archivo detectados
-- Conexiones de red establecidas
-- Análisis detallado del LLM
-- Alertas y advertencias detectadas
+- Comprehensive process information
+- Detected file events
+- Established network connections
+- Detailed LLM analysis
+- Alerts and warnings
 
-## 🛠️ Tecnologías
+## 🛠️ Technologies
 
-- Rust para rendimiento y seguridad
-- Ollama/llama.cpp para procesamiento LLM local
-- Clap para la interfaz de línea de comandos
+- Rust for performance and safety
+- Ollama/llama.cpp for local LLM processing
+- Clap for command-line interface
 
-## ⚠️ Limitaciones actuales
+## ⚠️ Current limitations
 
-- La interceptación real de operaciones de archivo y red está en desarrollo
-- El modo de auditoría de binarios está parcialmente implementado
-- Algunos comportamientos sospechosos pueden requerir permisos elevados para su detección
+- Real interception of file and network operations is in progress
+- Binary audit mode is partially implemented
+- Detecting certain suspicious behaviors may require elevated privileges
 
-## 🧩 Contribuir
+## 🧩 Contributing
 
-Contribuciones son bienvenidas! Ve a la sección de [issues](https://github.com/usuario/shadowtrace/issues) para comenzar.
+Contributions are welcome! Check the [issues](https://github.com/usuario/shadowtrace/issues) to get started.
 
-## 📄 Licencia
+## 📄 License
 
-Este proyecto está licenciado bajo MIT License.
+This project is licensed under the MIT License.
 
-# README - Solución para la Interacción con Teclado en ShadowTrace TUI
+# README - Fix for Keyboard Input in ShadowTrace TUI
 
-## Problema Resuelto
+## Resolved Problem
 
-ShadowTrace TUI presentaba problemas con la captura de eventos de teclado, lo que impedía la navegación normal por la interfaz. La aplicación mostraba correctamente los elementos visuales, pero no respondía a las pulsaciones de teclas.
+ShadowTrace TUI had issues capturing keyboard events, preventing normal navigation. The UI rendered correctly but did not respond to key presses.
 
-## Descripción de la Solución
+## Solution Description
 
-Se identificó que el problema estaba en la implementación del sistema de eventos en `src/ui/events.rs`. El código original utilizaba un enfoque no bloqueante (`try_recv()`) que no esperaba adecuadamente por los eventos de teclado.
+The issue was identified in the event system implementation in `src/ui/events.rs`. The original code used a non-blocking approach (`try_recv()`) that did not wait properly for keyboard events.
 
-Las modificaciones implementadas incluyen:
+Changes implemented:
 
-1. **Cambio en el método de lectura de eventos**:
+1. **Event reading method change**:
 
-   - Adición de `event::poll()` con un timeout de 100ms antes de intentar leer eventos
-   - Esto evita intentos constantes de lectura cuando no hay eventos disponibles
+   - Added `event::poll()` with a 100 ms timeout before attempting to read events
+   - This avoids constant read attempts when there are no events
 
-2. **Mejora en el manejo de eventos recibidos**:
-   - Reemplazo de `try_recv()` por `recv_timeout()` con un timeout de 50ms
-   - Esto permite esperar brevemente por eventos sin bloquear completamente el hilo
+2. **Improved handling of received events**:
+   - Replaced `try_recv()` with `recv_timeout()` with a 50 ms timeout
+   - This allows briefly waiting for events without fully blocking the thread
 
-## Código Modificado
+## Modified Code
 
 ```rust
-// Hilo para eventos de entrada
+// Input event thread
 thread::spawn(move || {
     loop {
-        // Leer eventos de manera bloqueante
+        // Blockingly read events
         if event::poll(Duration::from_millis(100)).unwrap_or(false) {
             if let Ok(event) = event::read() {
                 if let Err(err) = event_tx.send(Event::Input(event)) {
-                    eprintln!("Error enviando evento: {:?}", err);
+                    eprintln!("Error sending event: {:?}", err);
                     break;
                 }
             }
@@ -146,75 +146,75 @@ thread::spawn(move || {
 // ...
 
 pub fn next(&self) -> Result<Option<CEvent>> {
-    // Usar recv_timeout en lugar de try_recv para bloquear pero con un tiempo límite
+    // Use recv_timeout instead of try_recv to block with a time limit
     match self.rx.recv_timeout(Duration::from_millis(50)) {
         Ok(Event::Input(event)) => Ok(Some(event)),
         Ok(Event::Tick) => Ok(None),
         Err(mpsc::RecvTimeoutError::Timeout) => Ok(None),
-        Err(mpsc::RecvTimeoutError::Disconnected) => Err(anyhow::anyhow!("Canal de eventos desconectado")),
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(anyhow::anyhow!("Event channel disconnected")),
     }
 }
 ```
 
-## Análisis Técnico
+## Technical Analysis
 
-### Problema Original
+### Original Problem
 
-El problema se originaba en la implementación del sistema de eventos que utilizaba `try_recv()`, un método no bloqueante que retorna inmediatamente si no hay eventos disponibles. Esto provocaba que muchos eventos de teclado se perdieran o no fueran procesados correctamente.
+The problem originated in the event system implementation using `try_recv()`, a non-blocking method that returns immediately if there are no events. This caused many key events to be missed or not processed correctly.
 
-### Impacto de los Cambios
+### Impact of the Changes
 
-- **Eficiencia mejorada**: Reducción del uso de CPU al evitar polling constante
-- **Mayor capacidad de respuesta**: Mejor captura de eventos de teclado al esperar activamente
-- **Comportamiento más predecible**: Timeouts configurables para adaptar a diferentes entornos
+- **Improved efficiency**: Reduced CPU usage by avoiding constant polling
+- **Better responsiveness**: Improved key event capture by actively waiting
+- **More predictable behavior**: Configurable timeouts for different environments
 
-### Entorno de Ejecución
+### Runtime Environment
 
-Esta solución ha sido probada en entornos macOS, pero debería funcionar en cualquier plataforma compatible con Rust y Crossterm.
+This solution has been tested on macOS, and should work on any platform supported by Rust and Crossterm.
 
-## Uso de la Interfaz
+## Interface Usage
 
-### Teclas de Navegación
+### Navigation Keys
 
-- `p` - Acceso al Monitor de Procesos
-- `f` - Acceso al Monitor de Archivos
-- `n` - Acceso al Monitor de Red
-- `r` - Acceso a Reportes
-- `h` - Mostrar Ayuda
-- `q` o `Esc` - Salir o Volver al Menú Principal
+- `p` - Process Monitor
+- `f` - File Monitor
+- `n` - Network Monitor
+- `r` - Reports
+- `h` - Help
+- `q` or `Esc` - Exit or Return to Main Menu
 
-### Teclas Específicas por Pantalla
+### Screen-Specific Keys
 
-- **Monitor de Procesos**:
+- **Process Monitor**:
 
-  - Flechas Arriba/Abajo - Navegar entre procesos
-  - Enter - Seleccionar proceso para monitoreo
-  - `r` - Refrescar lista
+  - Up/Down arrows - Navigate between processes
+  - Enter - Select a process for monitoring
+  - `r` - Refresh list
 
-- **Otras Pantallas**:
-  - Esc - Volver al Dashboard
+- **Other Screens**:
+  - Esc - Return to Dashboard
 
-## Solución de Problemas Adicionales
+## Additional Troubleshooting
 
-Si aún experimentas problemas con la entrada de teclado:
+If you still experience keyboard input issues:
 
-1. **Terminal con Foco**: Asegúrate de que la ventana de terminal tiene el foco
-2. **Drivers de Teclado**: Verifica que no hay conflictos con software que pueda estar capturando teclas
-3. **Variables de Entorno**: Ejecuta con `TERM=xterm-256color cargo run` para forzar un tipo de terminal específico
-4. **Terminal Alternativa**: Prueba con un emulador de terminal diferente (iTerm2, Alacritty, etc.)
+1. **Terminal focus**: Ensure the terminal window is focused
+2. **Keyboard drivers**: Check for software conflicts that might capture keys
+3. **Environment variables**: Run with `TERM=xterm-256color cargo run` to force a specific terminal type
+4. **Alternate terminal**: Try a different terminal emulator (iTerm2, Alacritty, etc.)
 
-## Notas Técnicas
+## Technical Notes
 
-Esta implementación utiliza las siguientes bibliotecas:
+This implementation uses the following libraries:
 
-- **crossterm**: Para captura de eventos y manejo de terminal
-- **ratatui**: Para renderizado de la interfaz TUI
-- **tokio**: Para el runtime asíncrono
+- **crossterm**: Event capture and terminal handling
+- **ratatui**: TUI rendering
+- **tokio**: Async runtime
 
-El manejo de eventos se realiza mediante hilos separados que comunican eventos a través de canales MPSC (Multiple Producer, Single Consumer) de Rust, permitiendo una arquitectura desacoplada.
+Event handling uses separate threads with Rust MPSC channels (Multiple Producer, Single Consumer), enabling a decoupled architecture.
 
-## Referencias
+## References
 
-- [Documentación de crossterm](https://docs.rs/crossterm)
-- [Documentación de ratatui](https://docs.rs/ratatui)
-- [FAQs de ratatui](https://ratatui.rs/faq/)
+- [crossterm documentation](https://docs.rs/crossterm)
+- [ratatui documentation](https://docs.rs/ratatui)
+- [ratatui FAQs](https://ratatui.rs/faq/)
