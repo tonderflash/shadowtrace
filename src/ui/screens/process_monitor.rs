@@ -161,16 +161,43 @@ fn draw_process_list(frame: &mut Frame, app: &mut App, area: Rect) {
     // Crear lista de procesos
     let processes = &app.processes;
     
+    // Obtener el PID del proceso seleccionado persistentemente (si existe)
+    let selected_pid = app.selected_process_session.as_ref().map(|s| s.pid);
+    
     let items: Vec<ListItem> = processes
         .iter()
-        .map(|p| {
+        .enumerate()
+        .map(|(idx, p)| {
             let name = p.name.clone();
             let pid = p.pid;
             let cpu = p.cpu_usage;
             
+            // Determinar si este proceso está seleccionado persistentemente
+            let is_selected = selected_pid == Some(pid);
+            
+            // Determinar si este es el item bajo el cursor
+            let is_highlighted = app.list_state.selected() == Some(idx);
+            
+            // Estilo base para el proceso seleccionado (persistente)
+            let selected_style = if is_selected {
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Blue)
+                    .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
             // Formato mejorado para mayor visibilidad
-            let content = Line::from(vec![
-                Span::raw(format!("{:<8}", pid)),
+            let mut spans = vec![
+                Span::styled(
+                    format!("{:<8}", pid),
+                    if is_selected {
+                        selected_style.fg(Color::LightCyan)
+                    } else {
+                        Style::default()
+                    }
+                ),
                 Span::styled(
                     format!("{:>6.1}% ", cpu),
                     Style::default()
@@ -179,8 +206,23 @@ fn draw_process_list(frame: &mut Frame, app: &mut App, area: Rect) {
                             else { Color::Green })
                         .add_modifier(Modifier::BOLD)
                 ),
-                Span::raw(name),
-            ]);
+            ];
+            
+            // Agregar indicador visual si está seleccionado
+            if is_selected {
+                spans.push(Span::styled("✓ ", Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)));
+            }
+            
+            spans.push(Span::styled(
+                name,
+                if is_selected {
+                    selected_style
+                } else {
+                    Style::default()
+                }
+            ));
+            
+            let content = Line::from(spans);
             
             ListItem::new(content)
         })
@@ -189,7 +231,14 @@ fn draw_process_list(frame: &mut Frame, app: &mut App, area: Rect) {
     let list = List::new(items)
         .block(Block::default()
             .borders(Borders::ALL)
-            .title(" Procesos ")
+            .title({
+                let title = if selected_pid.is_some() {
+                    format!(" Procesos [Seleccionado: PID {}] ", selected_pid.unwrap())
+                } else {
+                    " Procesos ".to_string()
+                };
+                title
+            })
             .title_style(Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::LightGreen))
         .highlight_symbol(" 👉 ");
@@ -478,6 +527,53 @@ fn simulate_chart_data(seed: u64, current_value: f64) -> Vec<(f64, f64)> {
     data
 }
 
+/// Estadísticas de los datos recopilados
+struct MonitoringStats {
+    cpu_avg: f32,
+    cpu_max: f32,
+    cpu_min: f32,
+    mem_avg: f64,
+    mem_max: u64,
+    mem_min: u64,
+    sample_count: usize,
+}
+
+impl MonitoringStats {
+    /// Calcula estadísticas de los datos de monitoreo usando iteradores eficientes
+    fn from_histories(cpu_history: &[f32], memory_history: &[u64]) -> Option<Self> {
+        if cpu_history.is_empty() || memory_history.is_empty() {
+            return None;
+        }
+
+        // Calcular estadísticas de CPU usando iteradores
+        let cpu_avg = cpu_history.iter().sum::<f32>() / cpu_history.len() as f32;
+        let cpu_max = cpu_history
+            .iter()
+            .copied()
+            .fold(f32::NEG_INFINITY, f32::max);
+        let cpu_min = cpu_history
+            .iter()
+            .copied()
+            .fold(f32::INFINITY, f32::min);
+
+        // Calcular estadísticas de memoria usando iteradores
+        let mem_sum: u64 = memory_history.iter().sum();
+        let mem_avg = mem_sum as f64 / memory_history.len() as f64;
+        let mem_max = memory_history.iter().copied().max().unwrap_or(0);
+        let mem_min = memory_history.iter().copied().min().unwrap_or(0);
+
+        Some(Self {
+            cpu_avg,
+            cpu_max,
+            cpu_min,
+            mem_avg,
+            mem_max,
+            mem_min,
+            sample_count: cpu_history.len(),
+        })
+    }
+}
+
 /// Dibujar panel de análisis LLM
 fn draw_llm_analysis(frame: &mut Frame, app: &mut App, area: Rect) {
     // Mostrar análisis LLM si hay uno disponible
@@ -540,8 +636,8 @@ fn draw_llm_analysis(frame: &mut Frame, app: &mut App, area: Rect) {
                 frame.render_widget(nav_widget, nav_area);
             }
         }
-    } else if let Some(pid) = app.selected_pid {
-        // Mostrar un mensaje para iniciar análisis
+    } else if app.selected_pid.is_some() {
+        // Mostrar un mensaje para iniciar análisis o estadísticas de datos recopilados
         let mut content = vec![
             Line::from(vec![
                 Span::styled("No hay análisis para este proceso", 
@@ -568,11 +664,92 @@ fn draw_llm_analysis(frame: &mut Frame, app: &mut App, area: Rect) {
                 Span::raw(" para monitorear este proceso.")
             ]));
         } else {
-            content.push(Line::from(vec![
-                Span::raw("Presiona "),
-                Span::styled("A", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                Span::raw(" para realizar un análisis con los datos recopilados.")
-            ]));
+            // Mostrar estadísticas de los datos recopilados
+            if let Some(stats) = MonitoringStats::from_histories(&app.cpu_history, &app.memory_history) {
+                // Encabezado de estadísticas
+                content.push(Line::from(vec![
+                    Span::styled("📊 Datos Recopilados", 
+                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                ]));
+                content.push(Line::from(""));
+                
+                // Información general
+                content.push(Line::from(vec![
+                    Span::styled("Muestras: ", Style::default().fg(Color::LightYellow)),
+                    Span::raw(format!("{}", stats.sample_count)),
+                ]));
+                content.push(Line::from(""));
+                
+                // Estadísticas de CPU
+                content.push(Line::from(vec![
+                    Span::styled("CPU (%):", Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+                ]));
+                content.push(Line::from(vec![
+                    Span::raw("  Promedio: "),
+                    Span::styled(
+                        format!("{:.2}%", stats.cpu_avg),
+                        Style::default().fg(if stats.cpu_avg > 50.0 { Color::Red } 
+                            else if stats.cpu_avg > 20.0 { Color::Yellow } 
+                            else { Color::Green })
+                    ),
+                ]));
+                content.push(Line::from(vec![
+                    Span::raw("  Máximo:   "),
+                    Span::styled(
+                        format!("{:.2}%", stats.cpu_max),
+                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                    ),
+                ]));
+                content.push(Line::from(vec![
+                    Span::raw("  Mínimo:   "),
+                    Span::styled(
+                        format!("{:.2}%", stats.cpu_min),
+                        Style::default().fg(Color::Green)
+                    ),
+                ]));
+                content.push(Line::from(""));
+                
+                // Estadísticas de Memoria
+                content.push(Line::from(vec![
+                    Span::styled("Memoria:", Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+                ]));
+                content.push(Line::from(vec![
+                    Span::raw("  Promedio: "),
+                    Span::styled(
+                        format!("{:.2} MB", stats.mem_avg / 1024.0),
+                        Style::default().fg(Color::Cyan)
+                    ),
+                ]));
+                content.push(Line::from(vec![
+                    Span::raw("  Máximo:   "),
+                    Span::styled(
+                        format!("{:.2} MB", stats.mem_max as f64 / 1024.0),
+                        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+                    ),
+                ]));
+                content.push(Line::from(vec![
+                    Span::raw("  Mínimo:   "),
+                    Span::styled(
+                        format!("{:.2} MB", stats.mem_min as f64 / 1024.0),
+                        Style::default().fg(Color::Blue)
+                    ),
+                ]));
+                content.push(Line::from(""));
+                
+                // Acción sugerida
+                content.push(Line::from(vec![
+                    Span::raw("Presiona "),
+                    Span::styled("A", Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)),
+                    Span::raw(" para realizar un análisis LLM con estos datos.")
+                ]));
+            } else {
+                // Fallback si no se pueden calcular estadísticas
+                content.push(Line::from(vec![
+                    Span::raw("Presiona "),
+                    Span::styled("A", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" para realizar un análisis con los datos recopilados.")
+                ]));
+            }
         }
         
         let paragraph = Paragraph::new(content)

@@ -22,6 +22,8 @@ pub struct LlmConfig {
     pub api_url: String,
     /// Modelo a utilizar
     pub model: String,
+    /// API Key para autenticación (requerida para OpenAI)
+    pub api_key: Option<String>,
     /// Temperatura (creatividad) del modelo
     pub temperature: f32,
     /// Timeout en segundos
@@ -36,6 +38,7 @@ impl Default for LlmConfig {
             provider: LlmProvider::Ollama,
             api_url: "http://localhost:11434/api".to_string(),
             model: "llama2".to_string(),
+            api_key: None,
             temperature: 0.5,
             timeout_seconds: 30,
             max_tokens: Some(512),
@@ -234,12 +237,18 @@ Aquí está el reporte:\n{}",
     
     /// Generar una respuesta utilizando una API compatible con OpenAI
     async fn generate_openai_compatible_response(&self, prompt: &str) -> Result<String> {
+        // Validar que el modelo esté configurado
+        if self.config.model.is_empty() {
+            return Err(anyhow::anyhow!("El modelo no puede estar vacío. Por favor configura un modelo válido (ej: gpt-4o-mini)"));
+        }
+        
         // Estructura para API compatible con OpenAI
         #[derive(Serialize)]
         struct OpenAiRequest {
             model: String,
             messages: Vec<Message>,
             temperature: f32,
+            #[serde(skip_serializing_if = "Option::is_none")]
             max_tokens: Option<u32>,
         }
         
@@ -265,17 +274,41 @@ Aquí está el reporte:\n{}",
             max_tokens: self.config.max_tokens,
         };
         
-        let response = self.client.post(&self.config.api_url)
-            .json(&request)
+        // Construir la solicitud HTTP con reqwest
+        // Usar .json() que automáticamente serializa y establece Content-Type: application/json
+        let mut req = self.client.post(&self.config.api_url)
+            .json(&request);
+        
+        // Agregar header de autenticación si hay API key
+        if let Some(api_key) = &self.config.api_key {
+            req = req.header("Authorization", format!("Bearer {}", api_key));
+        }
+        
+        let response = req
             .send()
-            .await?
-            .json::<Value>()
-            .await?;
-            
-        // Extraer el texto de la respuesta (estructura típica de una API OpenAI)
-        let content = response["choices"][0]["message"]["content"]
+            .await
+            .context("Error al enviar solicitud a OpenAI API")?;
+        
+        // Verificar el código de estado HTTP
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Error desconocido".to_string());
+            return Err(anyhow::anyhow!(
+                "Error HTTP {}: {}",
+                status.as_u16(),
+                error_text
+            ));
+        }
+        
+        let response_json: Value = response
+            .json()
+            .await
+            .context("Error al parsear respuesta JSON de OpenAI")?;
+        
+        // Extraer el texto de la respuesta (estructura estándar de OpenAI API)
+        let content = response_json["choices"][0]["message"]["content"]
             .as_str()
-            .context("No se pudo extraer el contenido de la respuesta")?;
+            .context("No se pudo extraer el contenido de la respuesta. Verifica que la respuesta tenga el formato esperado.")?;
             
         Ok(content.to_string())
     }

@@ -32,6 +32,7 @@ impl AppConfig {
                 provider: LlmProvider::Ollama,
                 api_url: api_url.clone(),
                 model: model.clone(),
+                api_key: None, // Ollama no requiere API key
                 temperature: 0.7,
                 timeout_seconds: 30,
                 max_tokens: Some(1024),
